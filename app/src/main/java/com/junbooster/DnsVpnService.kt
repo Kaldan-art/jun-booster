@@ -42,13 +42,15 @@ class DnsVpnService : VpnService() {
                 InetAddress.getAllByName(workerHost).toList()
 
             val client = OkHttpClient.Builder()
-                .dns(Dns { hostname ->
-                    if (hostname == workerHost) {
-                        workerAddresses
-                    } else {
-                        Dns.SYSTEM.lookup(hostname)
-                    }
-                })
+                .dns(object : Dns {
+    override fun lookup(hostname: String): List<InetAddress> {
+        return if (hostname == workerHost) {
+            workerAddresses
+        } else {
+            Dns.SYSTEM.lookup(hostname)
+        }
+    }
+})
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()

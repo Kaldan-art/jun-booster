@@ -1,4 +1,4 @@
-
+import android.content.pm.ServiceInfo
 package com.junbooster
 
 import android.net.VpnService
@@ -80,6 +80,19 @@ private fun createVpnNotification(): Notification {
         flags: Int,
         startId: Int
     ): Int {
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    startForeground(
+        notificationId,
+        createVpnNotification(),
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED
+    )
+} else {
+    startForeground(
+        notificationId,
+        createVpnNotification()
+    )
+}
+
 
         if (vpnInterface != null) return START_NOT_STICKY
 

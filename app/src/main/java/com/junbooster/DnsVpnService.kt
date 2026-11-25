@@ -308,12 +308,23 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 
         return sum.inv() and 0xFFFF
     }
+override fun onRevoke() {
+    stopSelf()
+    super.onRevoke()
+}
 
-    override fun onDestroy() {
-        packetThread?.interrupt()
+override fun onDestroy() {
+    packetThread?.interrupt()
+
+    try {
         vpnInterface?.close()
-        vpnInterface = null
-        packetThread = null
-        super.onDestroy()
+    } catch (_: Exception) {
     }
+
+    vpnInterface = null
+    packetThread = null
+
+    stopForeground(true)
+    super.onDestroy()
+} 
 }

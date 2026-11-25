@@ -87,114 +87,185 @@ private fun createVpnNotification(): Notification {
         .build()
 }
 
-    override fun onStartCommand(
-        intent: Intent?,
-        flags: Int,
-        startId: Int
-    ): Int {
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-    startForeground(
-        notificationId,
-        createVpnNotification(),
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED
-    )
-} else {
-    startForeground(
-        notificationId,
-        createVpnNotification()
-    )
-}
+    
+override fun onStartCommand(
+    intent: Intent?,
+    flags: Int,
+    startId: Int
+): Int {
 
+    try {
+        val notification = createVpnNotification()
 
-        if (vpnInterface != null) return START_NOT_STICKY
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(
+                notificationId,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED
+            )
+        } else {
+            startForeground(notificationId, notification)
+        }
+    } catch (_: Exception) {
+        stopSelf(startId)
+        return START_NOT_STICKY
+    }
+
+    val shouldStart = synchronized(lifecycleLock) {
+        if (vpnInterface != null ||
+            startupInProgress ||
+            serviceStopping
+        ) {
+            false
+        } else {
+            startupInProgress = true
+            true
+        }
+    }
+
+    if (!shouldStart) return START_NOT_STICKY
+
+    val worker = Thread({
 
         try {
-            // Resolve the Worker before creating the VPN.
             val workerHost =
                 "quiet-art-35be.kaldanone2.workers.dev"
 
             val workerAddresses =
                 InetAddress.getAllByName(workerHost).toList()
 
+            if (serviceStopping) return@Thread
+
             val client = OkHttpClient.Builder()
                 .dns(object : Dns {
-    override fun lookup(hostname: String): List<InetAddress> {
-        return if (hostname == workerHost) {
-            workerAddresses
-        } else {
-            Dns.SYSTEM.lookup(hostname)
-        }
-    }
-})
+                    override fun lookup(
+                        hostname: String
+                    ): List<InetAddress> {
+                        return if (hostname == workerHost) {
+                            workerAddresses
+                        } else {
+                            Dns.SYSTEM.lookup(hostname)
+                        }
+                    }
+                })
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            val builder = Builder()
-    .setSession("JUN BOOSTER")
-    .addAddress("10.10.0.2", 32)
-    .addDnsServer("10.10.0.1")
-.addRoute("10.10.0.1", 32)
-    .setMtu(1500)
+            val executor = ThreadPoolExecutor(
+                4,
+                4,
+                0L,
+                TimeUnit.MILLISECONDS,
+                ArrayBlockingQueue(64)
+            )
 
-            vpnInterface = builder.establish()
-
-            val descriptor = vpnInterface ?: run {
-                stopSelf()
-                return START_NOT_STICKY
+            val descriptor = synchronized(lifecycleLock) {
+                if (serviceStopping) {
+                    null
+                } else {
+                    Builder()
+                        .setSession("JUN BOOSTER")
+                        .addAddress("10.10.0.2", 32)
+                        .addDnsServer("10.10.0.1")
+                        .addRoute("10.10.0.1", 32)
+                        .setMtu(1500)
+                        .establish()
+                        ?.also {
+                            vpnInterface = it
+                            dnsExecutor = executor
+                        }
+                }
             }
-            dnsExecutor = ThreadPoolExecutor(
-    4,
-    4,
-    0L,
-    TimeUnit.MILLISECONDS,
-    ArrayBlockingQueue(64)
-)
-            packetThread = Thread {
-                val input = FileInputStream(descriptor.fileDescriptor)
-                val output = FileOutputStream(descriptor.fileDescriptor)
-                val buffer = ByteArray(32767)
+
+            if (descriptor == null) {
+                executor.shutdownNow()
+                stopSelf()
+                return@Thread
+            }
+
+            val engine = Thread({
 
                 try {
-                    while (!Thread.currentThread().isInterrupted) {
+                    val input = FileInputStream(
+                        descriptor.fileDescriptor
+                    )
+
+                    val output = FileOutputStream(
+                        descriptor.fileDescriptor
+                    )
+
+                    val buffer = ByteArray(32767)
+
+                    while (!Thread.currentThread().isInterrupted &&
+                        !serviceStopping
+                    ) {
                         val length = input.read(buffer)
+
                         if (length <= 0) continue
 
                         val packet = buffer.copyOf(length)
 
-try {
-    dnsExecutor?.execute {
-        val response = forwardDns(packet, client)
+                        try {
+                            executor.execute {
+                                val response =
+                                    forwardDns(packet, client)
 
-        if (response != null) {
-            try {
-                synchronized(output) {
-                    output.write(response)
-                }
-            } catch (_: Exception) {
-                // VPN may have stopped.
-            }
-        }
-    }
-} catch (_: RejectedExecutionException) {
-    // Queue is full; drop this DNS request.
-}
+                                if (response != null) {
+                                    try {
+                                        synchronized(output) {
+                                            output.write(response)
+                                        }
+                                    } catch (_: Exception) {
+                                        // VPN stopped.
+                                    }
+                                }
+                            }
+                        } catch (_: RejectedExecutionException) {
+                            // Queue full.
+                        }
                     }
                 } catch (_: Exception) {
-                    // The VPN may close while the service stops.
+                    // VPN stopped or interface closed.
                 }
-            }.apply {
-                name = "JUN-DNS-ENGINE"
-                start()
+
+            }, "JUN-DNS-ENGINE")
+
+            synchronized(lifecycleLock) {
+                if (serviceStopping) {
+                    descriptor.close()
+                    executor.shutdownNow()
+                } else {
+                    packetThread = engine
+                    engine.start()
+                }
             }
 
         } catch (_: Exception) {
             stopSelf()
+        } finally {
+            synchronized(lifecycleLock) {
+                startupInProgress = false
+                startupThread = null
+            }
+        }
+
+    }, "JUN-VPN-STARTUP")
+
+    synchronized(lifecycleLock) {
+        if (serviceStopping) {
+            startupInProgress = false
             return START_NOT_STICKY
         }
 
-        return START_NOT_STICKY
+        startupThread = worker
     }
+
+    worker.start()
+
+    return START_NOT_STICKY
+}
+
 
     private fun forwardDns(
         packet: ByteArray,

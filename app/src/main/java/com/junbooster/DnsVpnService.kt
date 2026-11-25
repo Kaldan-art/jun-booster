@@ -119,11 +119,11 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 .build()
 
             val builder = Builder()
-                .setSession("JUN BOOSTER")
-                .addAddress("10.10.0.2", 32)
-                .addDnsServer("10.10.0.1")
-                .addRoute("10.10.0.1", 32)
-                .setMtu(1500)
+    .setSession("JUN BOOSTER")
+    .addAddress("10.10.0.2", 32)
+    .addDnsServer("10.10.0.2")
+    .addRoute("10.10.0.2", 32)
+    .setMtu(1500)
 
             vpnInterface = builder.establish()
 

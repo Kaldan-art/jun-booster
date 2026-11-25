@@ -32,6 +32,49 @@ class DnsVpnService : VpnService() {
     private val dnsMediaType =
         "application/dns-message".toMediaType()
 
+private val channelId = "jun_booster_vpn"
+private val notificationId = 1001
+
+private fun createVpnNotification(): Notification {
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            channelId,
+            "JUN BOOSTER VPN",
+            NotificationManager.IMPORTANCE_LOW
+        )
+
+        val manager =
+            getSystemService(Context.NOTIFICATION_SERVICE)
+                as NotificationManager
+
+        manager.createNotificationChannel(channel)
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or
+            PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        Notification.Builder(this, channelId)
+    } else {
+        Notification.Builder(this)
+    }
+
+    return builder
+        .setSmallIcon(android.R.drawable.stat_sys_warning)
+        .setContentTitle("JUN BOOSTER")
+        .setContentText("VPN service is running")
+        .setContentIntent(pendingIntent)
+        .setOngoing(true)
+        .setCategory(Notification.CATEGORY_SERVICE)
+        .build()
+}
+
     override fun onStartCommand(
         intent: Intent?,
         flags: Int,

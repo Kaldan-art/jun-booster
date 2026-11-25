@@ -13,6 +13,13 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.os.Build
+import android.content.Context
+import android.graphics.Color
 
 class DnsVpnService : VpnService() {
 

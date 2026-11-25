@@ -154,11 +154,24 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         if (length <= 0) continue
 
                         val packet = buffer.copyOf(length)
-                        val response = forwardDns(packet, client)
 
-                        if (response != null) {
-                            output.write(response)
-                        }
+try {
+    dnsExecutor?.execute {
+        val response = forwardDns(packet, client)
+
+        if (response != null) {
+            try {
+                synchronized(output) {
+                    output.write(response)
+                }
+            } catch (_: Exception) {
+                // VPN may have stopped.
+            }
+        }
+    }
+} catch (_: RejectedExecutionException) {
+    // Queue is full; drop this DNS request.
+}
                     }
                 } catch (_: Exception) {
                     // The VPN may close while the service stops.

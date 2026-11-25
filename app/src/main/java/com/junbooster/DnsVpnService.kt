@@ -427,21 +427,28 @@ override fun onRevoke() {
     super.onRevoke()
 }
 
+
 override fun onDestroy() {
-    dnsExecutor?.shutdownNow()
-dnsExecutor = null
-    
-    packetThread?.interrupt()
+    synchronized(lifecycleLock) {
+        serviceStopping = true
 
-    try {
-        vpnInterface?.close()
-    } catch (_: Exception) {
+        startupThread?.interrupt()
+        packetThread?.interrupt()
+
+        dnsExecutor?.shutdownNow()
+        dnsExecutor = null
+
+        try {
+            vpnInterface?.close()
+        } catch (_: Exception) {
+        }
+
+        vpnInterface = null
+        packetThread = null
+        startupThread = null
     }
-
-    vpnInterface = null
-    packetThread = null
 
     stopForeground(true)
     super.onDestroy()
-} 
+}
 }

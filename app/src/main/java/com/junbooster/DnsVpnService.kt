@@ -20,13 +20,16 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class DnsVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var packetThread: Thread? = null
-
+private var dnsExecutor: ExecutorService? = null
     private val dohUrl =
+    
         "https://quiet-art-35be.kaldanone2.workers.dev/doh-kali-7c9e2f4a1b6d8c3e5f0a9b2d4c6e8f1a/dns-query"
 
     private val dnsMediaType =

@@ -177,12 +177,14 @@ override fun onStartCommand(
                         }
                 }
             }
-
+            
             if (descriptor == null) {
                 executor.shutdownNow()
                 stopSelf()
                 return@Thread
             }
+            
+            val activeExecutor = executor
 
             val engine = Thread({
 

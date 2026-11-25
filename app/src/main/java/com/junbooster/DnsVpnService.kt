@@ -223,9 +223,16 @@ try {
 
         if (destinationPort != 53) return null
 
-        val dnsStart = ipHeaderLength + 8
-        val dnsLength = totalLength - dnsStart
-        if (dnsLength < 12) return null
+val udpLength =
+    ((packet[ipHeaderLength + 4].toInt() and 0xFF) shl 8) or
+    (packet[ipHeaderLength + 5].toInt() and 0xFF)
+
+if (udpLength < 20 ||
+    udpLength > totalLength - ipHeaderLength) return null
+
+val dnsStart = ipHeaderLength + 8
+val dnsLength = udpLength - 8
+if (dnsLength < 12) return null
 
         val dnsQuery = packet.copyOfRange(
             dnsStart,

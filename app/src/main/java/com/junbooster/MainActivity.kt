@@ -2,7 +2,10 @@
 package com.junbooster
 
 import android.app.Activity
+import android.net.VpnService
+import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.graphics.Color
 import android.text.InputType
 import android.view.Gravity
@@ -18,12 +21,21 @@ class MainActivity : Activity() {
     private lateinit var password: EditText
     private lateinit var layout: LinearLayout
 
+    companion object {
+        private const val VPN_REQUEST_CODE = 100
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         auth = FirebaseAuth.getInstance()
 
-        showLoginScreen()
+        val user = auth.currentUser
+        if (user != null && user.isEmailVerified) {
+            showWelcomeScreen()
+        } else {
+            showLoginScreen()
+        }
     }
 
     private fun createLayout() {
@@ -47,7 +59,8 @@ class MainActivity : Activity() {
 
         email = EditText(this).apply {
             hint = "Email address"
-            inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             setSingleLine(true)
         }
 
@@ -188,23 +201,117 @@ class MainActivity : Activity() {
         }
 
         val welcome = TextView(this).apply {
-            text = "WELCOME TO JUN BOOSTER"
-            textSize = 24f
+            text = "JUN BOOSTER"
+            textSize = 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
+        }
+
+        val description = TextView(this).apply {
+            text = "eFootball DNS Booster"
+            textSize = 16f
+            setTextColor(Color.LTGRAY)
+            gravity = Gravity.CENTER
+        }
+
+        val connectionStatus = TextView(this).apply {
+            text = "Status: Disconnected"
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+
+        val connect = Button(this).apply {
+            text = "CONNECT"
+            setOnClickListener {
+                connectionStatus.text = "Status: Requesting VPN permission..."
+                connectVpn()
+            }
+        }
+
+        val disconnect = Button(this).apply {
+            text = "DISCONNECT"
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, DnsVpnService::class.java))
+                connectionStatus.text = "Status: Disconnected"
+            }
         }
 
         val logout = Button(this).apply {
             text = "LOGOUT"
             setOnClickListener {
+                stopService(Intent(this@MainActivity, DnsVpnService::class.java))
                 auth.signOut()
                 showLoginScreen()
             }
         }
 
         welcomeLayout.addView(welcome)
+        welcomeLayout.addView(description)
+        welcomeLayout.addView(connectionStatus)
+        welcomeLayout.addView(connect)
+        welcomeLayout.addView(disconnect)
         welcomeLayout.addView(logout)
 
         setContentView(welcomeLayout)
+    }
+
+    private fun connectVpn() {
+        val prepareIntent = VpnService.prepare(this)
+
+        if (prepareIntent != null) {
+            startActivityForResult(
+                prepareIntent,
+                VPN_REQUEST_CODE
+            )
+        } else {
+            startVpnService()
+        }
+    }
+
+    private fun startVpnService() {
+        try {
+            val intent = Intent(this, DnsVpnService::class.java)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+
+            Toast.makeText(
+                this,
+                "VPN connection requested",
+                Toast.LENGTH_SHORT
+            ).show()
+
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Could not start VPN: ${e.localizedMessage}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == VPN_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK) {
+                startVpnService()
+            } else {
+                Toast.makeText(
+                    this,
+                    "VPN permission was not granted",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 }

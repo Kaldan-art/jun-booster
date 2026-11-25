@@ -255,6 +255,9 @@ if (dnsLength < 12) return null
         } ?: return null
 
         if (dnsResponse.size < 12) return null
+        
+        if (dnsResponse[0] != dnsQuery[0] ||
+    dnsResponse[1] != dnsQuery[1]) return null
 
         return buildUdpResponse(
             packet,

@@ -136,7 +136,13 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 stopSelf()
                 return START_NOT_STICKY
             }
-
+            dnsExecutor = ThreadPoolExecutor(
+    4,
+    4,
+    0L,
+    TimeUnit.MILLISECONDS,
+    ArrayBlockingQueue(64)
+)
             packetThread = Thread {
                 val input = FileInputStream(descriptor.fileDescriptor)
                 val output = FileOutputStream(descriptor.fileDescriptor)

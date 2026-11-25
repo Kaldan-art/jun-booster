@@ -338,6 +338,9 @@ override fun onRevoke() {
 }
 
 override fun onDestroy() {
+    dnsExecutor?.shutdownNow()
+dnsExecutor = null
+    
     packetThread?.interrupt()
 
     try {
